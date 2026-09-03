@@ -32,6 +32,18 @@ An agent can explain how to practise a piece, but advice in a chat still leaves 
 
 Duet exposes musical intent instead of screen coordinates. Its tools work with pieces, notes, bars, hands, tempo, loops, count-ins, metronome, mix, practice and captured phrases. The learner and agent share one score, one transport and one visible history.
 
+## A better experience for the learner
+
+One request replaces the usual trail of disconnected steps: finding the score, changing the tempo, muting one hand, setting a metronome, rebuilding a loop and remembering which notes need attention. Every agent action appears in the instrument immediately, so the learner can understand it, play it and change it again.
+
+Duet does not hide the collaboration behind a chat response. The title, score, tempo, loop, mix, highlighted keys, practice progress and activity history all become visible evidence of what the agent did.
+
+## What the learner and agent do together
+
+The learner brings the goal and the performance. The agent reads the current musical state, turns the request into a sequence of safe actions and verifies the result. The learner then plays the lesson, asks for another adjustment or sings a short phrase that Duet converts into notes for the agent to read.
+
+That shared loop was difficult before WebMCP: explain, configure, play, observe and refine all happened in separate places. In Duet they happen around one instrument without taking control away from the person.
+
 ## What works today
 
 - Responsive piano with a focused learning range or all 88 keys
@@ -62,7 +74,7 @@ Current verification:
 - Production build passing
 - Score pages verified below the 1,500-character response budget
 
-## How it is built
+## How WebMCP is implemented
 
 ```mermaid
 flowchart LR
@@ -84,34 +96,51 @@ flowchart LR
 - Vitest covers music, pitch, store and tool contracts.
 - Playwright verifies the shared human-and-agent journey in Chromium.
 
-<details>
-<summary><strong>See all 21 WebMCP tools</strong></summary>
+Each tool is registered through `document.modelContext.registerTool` with a name, agent-facing description, JSON input schema, read/write annotations and an `execute` function. The shared registration hook normalizes successful and failed responses and uses an `AbortController` to unregister tools cleanly when the page lifecycle changes.
 
-| Tool                    | What it lets an agent do                                                |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `duet.get_capabilities` | Discover the available instrument, transport and device features        |
-| `duet.get_state`        | Read the current piece, mode, practice and activity state               |
-| `duet.read_transport`   | Inspect position, tempo, loop, count-in, click and hand mix             |
-| `duet.read_score`       | Read a bounded page of notes by bar range or cursor                     |
-| `duet.play_notes`       | Play a supplied phrase or chord sequence                                |
-| `duet.load_piece`       | Load a library piece or structured arrangement                          |
-| `duet.play_piece`       | Start the active piece from the beginning or a selected bar             |
-| `duet.pause`            | Pause while preserving the exact musical position                       |
-| `duet.resume`           | Continue from the paused position                                       |
-| `duet.stop`             | Stop the transport and silence scheduled voices                         |
-| `duet.seek`             | Move to a particular bar or beat                                        |
-| `duet.set_loop`         | Create, change or clear a loop                                          |
-| `duet.set_metronome`    | Configure the metronome                                                 |
-| `duet.set_count_in`     | Add a zero-, one- or two-bar count-in                                   |
-| `duet.set_mix`          | Isolate or rebalance the left and right hands                           |
-| `duet.transform_piece`  | Change tempo, key, bars, hands or difficulty                            |
-| `duet.highlight_keys`   | Highlight named keys with a visible lesson label                        |
-| `duet.listen`           | Ask the browser to begin capturing a sung or hummed phrase              |
-| `duet.stop_listening`   | Finish capture and turn the phrase into structured notes                |
-| `duet.read_phrase`      | Read the most recently captured phrase without reopening the microphone |
-| `duet.start_practice`   | Begin expected-note practice on the active piece                        |
+```ts
+document.modelContext.registerTool(
+  {
+    name,
+    description,
+    inputSchema,
+    annotations,
+    async execute(args: unknown) {
+      const result = await latest.current.execute(args);
+      return toToolResponse(result);
+    },
+  },
+  { signal: controller.signal },
+);
+```
 
-</details>
+The complete implementation is in [`src/webmcp/DuetTools.tsx`](src/webmcp/DuetTools.tsx) and [`src/webmcp/useWebMCPTool.ts`](src/webmcp/useWebMCPTool.ts).
+
+## All 21 WebMCP tools
+
+| Tool                    | Type   | What it lets an agent do                                                |
+| ----------------------- | ------ | ----------------------------------------------------------------------- |
+| `duet.get_capabilities` | Read   | Discover the available instrument, transport and device features        |
+| `duet.get_state`        | Read   | Read the current piece, mode, practice and activity state               |
+| `duet.read_transport`   | Read   | Inspect position, tempo, loop, count-in, click and hand mix             |
+| `duet.read_score`       | Read   | Read a bounded page of notes by bar range or cursor                     |
+| `duet.play_notes`       | Action | Play a supplied phrase or chord sequence                                |
+| `duet.load_piece`       | Action | Load a library piece or structured arrangement                          |
+| `duet.play_piece`       | Action | Start the active piece from the beginning or a selected bar             |
+| `duet.pause`            | Action | Pause while preserving the exact musical position                       |
+| `duet.resume`           | Action | Continue from the paused position                                       |
+| `duet.stop`             | Action | Stop the transport and silence scheduled voices                         |
+| `duet.seek`             | Action | Move to a particular bar or beat                                        |
+| `duet.set_loop`         | Action | Create, change or clear a loop                                          |
+| `duet.set_metronome`    | Action | Configure the metronome                                                 |
+| `duet.set_count_in`     | Action | Add a zero-, one- or two-bar count-in                                   |
+| `duet.set_mix`          | Action | Isolate or rebalance the left and right hands                           |
+| `duet.transform_piece`  | Action | Change tempo, key, bars, hands or difficulty                            |
+| `duet.highlight_keys`   | Action | Highlight named keys with a visible lesson label                        |
+| `duet.listen`           | Action | Ask the browser to begin capturing a sung or hummed phrase              |
+| `duet.stop_listening`   | Action | Finish capture and turn the phrase into structured notes                |
+| `duet.read_phrase`      | Read   | Read the most recently captured phrase without reopening the microphone |
+| `duet.start_practice`   | Action | Begin expected-note practice on the active piece                        |
 
 ## Run locally
 
